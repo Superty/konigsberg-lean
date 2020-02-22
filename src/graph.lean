@@ -1,53 +1,41 @@
 import data.finset data.multiset
 noncomputable theory
 open_locale classical
-
-def indicator (p : Prop) [decidable p] : ℕ := if p then 1 else 0
-
 universe u
-structure digraph (α : Type) [decidable_eq α] :=
+
+section multidigraph
+structure multidigraph (α : Type) :=
 (V : finset α)
-(edge : α → α → Prop)
-(valid_edges : ∀ u v, edge u v → u ∈ V ∧ v ∈ V)
-(irreflexive (v : α) : ¬ edge v v)
+(edges : α → α → ℕ)
+(valid_edges : ∀ u v, edges u v ≠ 0 → u ∈ V ∧ v ∈ V)
+(irreflexive (v : α) : edges v v = 0)
+variable {α : Type}
+variable (g : multidigraph α)
+def has_edge {α : Type} (g : multidigraph α) (u v : α) : Prop := g.edges u v ≠ 0
+instance : has_mem (α × α) (multidigraph α) := ⟨λ ⟨u, v⟩ g, has_edge g u v⟩
+
+def is_walk : list (α × α) → Prop
+| []  := true
+| [e] := e ∈ g
+| (e :: f :: t) := e ∈ g ∧ e.2 = f.1 ∧ is_walk t
+
+def degree (v : α) : ℕ := finset.fold nat.add 0 (g.edges v) g.V
+def reachable : α → α → Prop := relation.refl_trans_gen (has_edge g)
+def connected : Prop := ∀ u v ∈ g.V, reachable g u v
+
+section walk
+structure walk := (edges : list (α × α)) (h : is_walk g edges)
+instance has_coe_to_list : has_coe (walk g : Type) (list (α × α) : Type) := ⟨λ w, w.edges⟩
+end walk
+end multidigraph
+
+section multigraph
+structure multigraph (α : Type) extends multidigraph α :=
+(symmetric : ∀ u v : α, edges u v = edges v u)
 
 variable {α : Type}
-instance : has_mem (α × α) (digraph α) := ⟨λ ⟨u, v⟩ g, g.edge u v⟩
+instance has_coe_to_multidigraph : has_coe (multigraph α : Type) (multidigraph α : Type) := ⟨multigraph.to_multidigraph⟩
 
-structure graph {α : Type} extends digraph α :=
-(symmetric : ∀ u v, edge u v → edge v u)
+variable g : multigraph α
 
-namespace digraph
-
-def is_walk (g : digraph α) : list α → Prop
-| []  := true
-| [u] := u ∈ g.V
-| (u :: v :: t) := (u, v) ∈ g ∧ is_walk (v :: t)
-
-structure walk (g : digraph α)
-(seq : list α) (h : is_walk g seq)
-
-namespace walk
--- variable {g : digraph α}
--- def to_list : Π {s t : α}, walk g s t → list α
--- | _ _ (walk.vert v _) :=  [v]
--- | s t (@walk.cons _ g a b c h w) := a :: (to_list w)
-
--- instance (s t : α) : has_lift (@walk α g s t : Type) (list α : Type) := ⟨to_list⟩
-
--- def count_vertex (x : α) [decidable_eq α] : Π {s t : α}, walk g s t → Prop
--- | _ _ (walk.vert v _) := true
--- | s t (@walk.cons _ g a b c h w) := x = c ∨ count_vertex w
-
--- def edge_mem_of_walk (e : α × α) : Π {s t : α}, walk g s t → Prop
--- | _ _ (walk.vert v _) := false
--- | s t (@walk.cons _ g a b c h w) := e = (a, b) ∨ edge_mem_of_walk w
-
--- instance inst_vertex_mem_of_digraph : has_mem α (digraph α) :=
--- ⟨λ v w, vertex_mem_of_walk v w ⟩
--- instance inst_edge_mem_of_digraph : has_mem (α × α) (digraph α) := edge_mem_of_walk
-
--- end walk
--- -- theorem walk_valid {s t : α} (w : walk g s t) : ∀ v ∈ w,
--- end digraph
--- []
+end multigraph
