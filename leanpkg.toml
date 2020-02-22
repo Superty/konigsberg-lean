@@ -1,0 +1,8 @@
+[package]
+name = "lean-graph-theory"
+version = "0.1"
+lean_version = "leanprover-community/lean:3.5.1"
+path = "src"
+
+[dependencies]
+mathlib = {git = "https://github.com/leanprover-community/mathlib", rev = "eeedc6a7973cc32816d77a2b2c4a99d8d8058d06"}
