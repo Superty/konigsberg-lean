@@ -1,5 +1,5 @@
 import data.finset data.multiset
-import tactic.abel
+import tactic.ring
 noncomputable theory
 open_locale classical
 
@@ -16,13 +16,10 @@ structure multigraph (α : Type) :=
 namespace multigraph
 variable {α : Type}
 
-@[reducible]
+@[simp]
 def has_edge (g : multigraph α) (u v : α) : Prop := g.edges u v ≠ 0
-
--- @[reducible]
+@[simp]
 instance : has_mem (α × α) (multigraph α) := ⟨λ e g, has_edge g e.1 e.2⟩
-
--- #check has_mem.mem
 
 def vertex_of_edge {g : multigraph α} {e : α × α} : e ∈ g → e.1 ∈ g.V ∧ e.2 ∈ g.V :=
 begin
@@ -83,8 +80,10 @@ begin
 end
 
 def reachable : α → α → Prop := relation.refl_trans_gen (has_edge g)
+@[reducible]
 def is_connected : Prop := ∀ u v ∈ g.V, reachable g u v
 
+@[reducible]
 def is_eulerian : Prop := ∃ (w : walk g), w.is_cycle ∧ w.is_eulerian
 end multigraph
 
@@ -94,16 +93,28 @@ variable {α : Type}
 variable (g : multigraph α)
 variable (hcon : g.is_connected)
 
+
+@[simp]
+lemma fun_abstract {α β : Type} (f : α → β) : f = (λ x : α, f x) := rfl
+
+-- variable {hdec1 : decidable_pred (λ x : α, a = x)}
+-- variable {hdec2 : decidable_pred (λ x : α, x = a)}
+-- variable {hdec3 : decidable_eq α}
+
 namespace list
 universe u
 variable (a : α)
 variable (l : list α)
-theorem count_eq_countp : l.count a = l.countp (λ x, a = x) :=
-by { induction l with x l ih; refl }
-theorem count_eq_countp' : l.count a = l.countp (λ x, x = a) :=
+
+#check multiset.fold_add
+
+theorem countp_cons (p : α → Prop) {h : decidable_pred p} {heq : decidable_eq α} : countp p (a :: l) = ite (p a) 1 0 +  countp p l :=
+by {by_cases p a; rw countp; simp [h], ring,}
+theorem count_eq_countp {h : decidable_pred (λ x, a = x)} {heq : decidable_eq α} : l.count a = l.countp (λ x, a = x) := rfl
+theorem count_eq_countp' {h : decidable_pred (λ x, a = x)} {h' : decidable_pred (λ x, x = a)}  {heq : decidable_eq α} : l.count a = l.countp (λ x, x = a) :=
 begin
   conv in (_ = a) { rw eq_comm, },
-  convert (count_eq_countp a l),
+  convert (@count_eq_countp _ a l h _),
 end
 
 theorem length_filter_eq_sum_map {α : Type} (l : list α) (p : α → Prop) [decidable_pred p] : length (filter p l) = sum (map (λ x, ite (p x) 1 0) l) :=
@@ -147,6 +158,17 @@ theorem countp_false_eq_zero {s : multiset α} : s.countp (λ x, false) = 0 := b
 
 end multiset
 
+namespace nat
+-- we don't seem to have cancellative monoids in mathlib yet
+variables a b : nat
+@[simp]
+lemma add_left_eq_self : a + b = b ↔ a = 0 :=
+⟨λ h, @add_right_cancel _ _ a b 0 (by simp [h]), λ h, by simp [h]⟩  
+
+@[simp]
+lemma add_right_eq_self : a + b = a ↔ b = 0 :=
+⟨λ h, @add_left_cancel _ _ a b 0 (by simp [h]), λ h, by simp [h]⟩
+end nat
 
 lemma two_dvd_add_self {x : ℕ} : 2 ∣ x + x := by {rw [← one_mul x, ← add_mul], simp}
 
@@ -176,93 +198,37 @@ begin
 
   have heqsum : list.length (w.edges.filter (λ e, e.1 = v)) = list.length (w.edges.filter (λ e, e.2 = v)) := sorry,
 
-
   have : g.degree v = g.sum (λ u, w.edges.count (u, v) + w.edges.count (v, u)) := sorry,
 
   have hquant : Π (l : list (α × α)), l <:+ w.edges → g.sum (λ u, l.count (u, v)) = list.length (l.filter (λ e, e.2 = v)),
-  {
-    intros l hsuff,
+  { intros l hsuff,
     induction l with x l ih,
     { simp [list.count_nil, multigraph.sum], },
-    have : x ∈ w.edges, from
-      list.mem_of_mem_suffix hsuff (show x ∈ (x :: l : list (α × α)), by simp),
+    have : x ∈ w.edges, from list.mem_of_mem_suffix hsuff (by simp),
     have hx : x ∈ g, from w.h.left this,
-    { 
-      
-      -- rw multigraph.sum,
-      -- rw multiset.sum_map_add,
-      -- rw ← multigraph.sum,
-      -- rw ih (list.cons_suffix hsuff),
-      -- rw add_comm,
-      -- rw add_right_cancel_iff,
+    { conv in (list.count _ _) { rw list.count_cons' },
+      rw multigraph.sum,
+      rw multiset.sum_map_add,
+      rw ← multigraph.sum,
+      rw ← multiset.card_filter_eq_sum_map,
+      rw ← multiset.countp_eq_card_filter,
+      rw ih (list.cons_suffix hsuff),
 
-      -- rw ← multiset.card_filter_eq_sum_map,
-      -- rw ← multiset.countp_eq_card_filter,
-      
-      -- conv {
-      --   congr,
-      --   congr,
-      --   funext,
-      --   simp [prod.eq_iff_fst_eq_snd_eq, h],
-      -- },
-      by_cases x.2 = v,
+      unfold list.filter,
+      by_cases x.2 = v; conv in (_ = x) {simp [prod.eq_iff_fst_eq_snd_eq, h],}; simp [h],
       { -- x.2 = v
-        conv in (list.count _ _) {
-          rw list.count_cons',
-        },
-        rw list.filter_cons_of_pos; try {assumption},
-        simp,
-        rw multigraph.sum,
-        rw multiset.sum_map_add,
-        rw ← multigraph.sum,
-        rw ih (list.cons_suffix hsuff),
         rw add_comm,
         rw add_right_cancel_iff,
-
-        rw ← multiset.card_filter_eq_sum_map,
-        rw ← multiset.countp_eq_card_filter,
-        
-        conv {
-          congr,
-          congr,
-          funext,
-          simp [prod.eq_iff_fst_eq_snd_eq, h],
-        },
         suffices : @multiset.countp α (λ (x_1 : α), x_1 = @prod.fst α α x)
     (λ (a : α), classical.prop_decidable ((λ (x_1 : α), x_1 = @prod.fst α α x) a))
     (@finset.val α (@V α g)) = 1, by convert this,
         rw ← @multiset.count_eq_countp' _ g.V.val x.fst,
         rw multiset.count_eq_one_of_mem g.V.nodup,
         exact and.left (vertex_of_edge hx), },
-
       { -- x.2 ≠ v
-                conv in (list.count _ _) {
-          rw list.count_cons',
-        },
-        rw list.filter_cons_of_neg; try {assumption},
-        -- simp,
-        rw multigraph.sum,
-        rw multiset.sum_map_add,
-        rw ← multigraph.sum,
-        rw ih (list.cons_suffix hsuff),
-        suffices : multiset.sum (multiset.map (λ (a : α), ite ((a, v) = x) 1 0) g.V.val) = 0,
-        simp [this],
-
-        rw ← multiset.card_filter_eq_sum_map,
-        rw ← multiset.countp_eq_card_filter,
         have h : (v = x.snd) = false, by {rw eq_comm at h, simp [eq_comm, eq_false_intro h]},
-
-        conv {
-          congr,
-          congr,
-          funext,
-          simp [prod.eq_iff_fst_eq_snd_eq],
-          rw (and_eq_of_eq_false_right h),
-        },
-        convert multiset.countp_false_eq_zero,
-      },
-    },
-  },
+        conv in (_ ∧ _ = x.2) { rw and_eq_of_eq_false_right h,},
+        convert multiset.countp_false_eq_zero }}},
   have : g.degree v = list.length (w.edges.filter (λ e, e.1 = v)) + list.length (w.edges.filter (λ e, e.2 = v)) := sorry,
 
   rw this,
