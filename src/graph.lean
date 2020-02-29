@@ -1,11 +1,13 @@
 import data.finset data.multiset
-import tactic.ring
+import tactic.ring tactic.linarith
 noncomputable theory
 open_locale classical
 
+namespace list
 def ihead {α : Type} : Π l : list α, l ≠ [] → α
 | []       h := absurd rfl h
 | (a :: t) h := a
+end list
 
 structure multigraph (α : Type) :=
 (V : finset α)
@@ -15,11 +17,18 @@ structure multigraph (α : Type) :=
 (undirected : ∀ u v : α, edges u v = edges v u)
 namespace multigraph
 variable {α : Type}
+variable {hinhabited : inhabited α}
 
 @[simp]
 def has_edge (g : multigraph α) (u v : α) : Prop := g.edges u v ≠ 0
 @[simp]
 instance : has_mem (α × α) (multigraph α) := ⟨λ e g, has_edge g e.1 e.2⟩
+
+def E (g : multigraph α) := {e : α × α  // g.has_edge e.1 e.2}
+
+@[simp]
+theorem no_self_loops_mem (g : multigraph α) (v : α) : (v, v) ∉ g :=
+λ h, h (g.no_self_loops v)
 
 def vertex_of_edge {g : multigraph α} {e : α × α} : e ∈ g → e.1 ∈ g.V ∧ e.2 ∈ g.V :=
 begin
@@ -31,27 +40,47 @@ end
 
 def walk_vertices_match (g : multigraph α) : list (α × α) → Prop
 | []  := true
-| [e] := e ∈ g
+| [e] := true
 | (e :: f :: t) := e.2 = f.1 ∧ walk_vertices_match t
 
 def is_walk (g : multigraph α) (l : list (α × α)): Prop :=
-(∀ {e}, e ∈ l → e ∈ g) ∧  walk_vertices_match g l
+(∀{e}, e ∈ l → e ∈ g) ∧  walk_vertices_match g l
 
-structure walk (g : multigraph α) := (edges : list (α × α)) (hnot_nil : edges ≠ list.nil) (h : is_walk g edges)
+inductive walk (g : multigraph α) : α → α → Type
+| nil : Π (v : α), walk v v
+| cons : Π (u v w : α) (hmem : (u, v) ∈ g) (l : walk v w), walk u w
+
 namespace walk
+variables {g : multigraph α}
 
-variable {g : multigraph α}
+@[simp]
+def edges : Π {s t : α} (w : walk g s t), list (α × α)
+| _ _ (nil g t) := []
+| _ _ (cons s t w hmem l) := (s, t) :: (@edges t w l)
+
+-- def pop_last : Π {s t : α} (l : walk g s t), (Σ e : g.E, walk g s e.1.1)
+-- | _ _ (nil g t) := 
+-- | _ _ (cons s _ _ hmem (nil g t)) := ⟨⟨(s, t), hmem⟩, nil g s⟩
+-- | _ _ (cons s _ _ hmem (cons t u t hmem2 l)) :=
+--     let ⟨x, l⟩ := pop_last (cons t u t hmem2 l) in ⟨x, cons s _ _ hmem l⟩
+
+@[reducible]
+instance : has_sizeof (walk g u v) := ⟨λ w, w.edges.length⟩
+
 instance has_coe_to_list : has_coe (walk g : Type) (list (α × α) : Type) := ⟨λ w, w.edges⟩
 
-variable w : walk g
+variables {s t : α}
+variable w : walk g s t
 def count (e : α × α) := finset.fold nat.add 0 (λ u, w.edges.count e) g.V
 
+-- inductive stlist : α → α → Type
+-- | single (s : α) : stlist s s
+-- | 
+
+@[reducible]
 def is_eulerian : Prop :=
 ∀ u v : α, g.edges u v = w.edges.count (u, v) + w.edges.count (v, u)
-
-def first : α := (ihead w.edges w.hnot_nil).1
-def last : α := (list.last w.edges w.hnot_nil).2
-def is_cycle : Prop := first w = last w
+def is_cycle : Prop := s = t
 end walk
 
 variable (g : multigraph α)
@@ -84,7 +113,7 @@ def reachable : α → α → Prop := relation.refl_trans_gen (has_edge g)
 def is_connected : Prop := ∀ u v ∈ g.V, reachable g u v
 
 @[reducible]
-def is_eulerian : Prop := ∃ (w : walk g), w.is_cycle ∧ w.is_eulerian
+def is_eulerian : Prop := ∃ (s t : α) (w : walk g s t), w.is_eulerian
 end multigraph
 
 open multigraph
@@ -106,16 +135,14 @@ universe u
 variable (a : α)
 variable (l : list α)
 
-#check multiset.fold_add
-
-theorem countp_cons (p : α → Prop) {h : decidable_pred p} {heq : decidable_eq α} : countp p (a :: l) = ite (p a) 1 0 +  countp p l :=
+theorem countp_cons {p : α → Prop} : countp p (a :: l) = ite (p a) 1 0 +  countp p l :=
 by {by_cases p a; rw countp; simp [h], ring,}
-theorem count_eq_countp {h : decidable_pred (λ x, a = x)} {heq : decidable_eq α} : l.count a = l.countp (λ x, a = x) := rfl
-theorem count_eq_countp' {h : decidable_pred (λ x, a = x)} {h' : decidable_pred (λ x, x = a)}  {heq : decidable_eq α} : l.count a = l.countp (λ x, x = a) :=
-begin
-  conv in (_ = a) { rw eq_comm, },
-  convert (@count_eq_countp _ a l h _),
-end
+-- theorem count_eq_countp {h : decidable_pred (λ x, a = x)} {heq : decidable_eq α} : l.count a = l.countp (λ x, a = x) := rfl
+-- theorem count_eq_countp' {h : decidable_pred (λ x, a = x)} {h' : decidable_pred (λ x, x = a)}  {heq : decidable_eq α} : l.count a = l.countp (λ x, x = a) :=
+-- begin
+--   conv in (_ = a) { rw eq_comm, },
+--   convert (@count_eq_countp _ a l h _),
+-- end
 
 theorem length_filter_eq_sum_map {α : Type} (l : list α) (p : α → Prop) [decidable_pred p] : length (filter p l) = sum (map (λ x, ite (p x) 1 0) l) :=
 begin
@@ -172,6 +199,10 @@ end nat
 
 lemma two_dvd_add_self {x : ℕ} : 2 ∣ x + x := by {rw [← one_mul x, ← add_mul], simp}
 
+def foo : α → α →  list α → α
+| _ y []       := y
+| x _ (h :: t) := foo h x t
+
 -- example (l : list α) (p : α → Prop) (h : ∀ x ∈ l, p x) : l.filter p = l.length :=
 -- begin
 --   induction h : l,
@@ -185,6 +216,52 @@ lemma two_dvd_add_self {x : ℕ} : 2 ∣ x + x := by {rw [← one_mul x, ← add
 
 -- set_option pp.implicit true
 
+open multigraph
+
+lemma nonterm_vert_in_walk (x : α) : ∀ (s t : α) (w : walk g s t),
+    s ≠ x → t ≠ x → w.edges.countp (λ e, e.1 = x) = w.edges.countp (λ e, e.2 = x)
+| _ _ (walk.nil g s)           := by simp
+| _ _ (walk.cons s _ _ hmem (walk.nil g v)) := by {intros, simp [list.countp_cons, *]}
+| _ _  (walk.cons s _ _ hmem (walk.cons v w t hmem2 l)) :=
+begin
+  intros hnot_start hnot_last,
+  by_cases v = x,
+  { have : w ≠ x,
+    { intro h2,
+      rw [h, h2] at hmem2,
+      exact absurd hmem2 (g.no_self_loops_mem x) },
+    simp [list.countp_cons, *],
+  },
+  have hl := nonterm_vert_in_walk v t (walk.cons v w t hmem2 l),
+  simp [list.countp_cons, *] at ⊢ hl,
+  exact hl,
+end
+
+
+lemma vert_in_walk (x : α) (s : α) (w : walk g s s) :
+    w.edges.countp (λ e, e.1 = x) = w.edges.countp (λ e, e.2 = x) :=
+begin
+  by_cases s = x,
+  { cases w with _ _ v _ hmem l,
+    { by simp },
+
+
+  }
+end
+
+
+-- lemma bar : ∀ (s t : α) (w : walk g s t), ℕ
+-- | _ _  (walk.nil g s)          := 0
+-- | _ _ (walk.cons s _ _ hmem l) :=
+-- -- have sizeof l < sizeof (walk.cons s v t hmem l), from sorry,
+--   match l with
+--   | (walk.nil g _) :=
+--   | (walk.cons s v t hmem l) :=
+
+theorem quant_countp (l : list α) (p : α → Prop) : g.sum 
+
+-- g.sum (λ u, ) = 
+
 lemma even_degree_of_eulerian (h : g.is_eulerian) : ∀ v : α, 2 ∣ g.degree v :=
 begin
   intro v,
@@ -192,20 +269,24 @@ begin
   swap,
   { simp [g.degree_eq_zero_of_non_vertex hv], },
   rw is_eulerian at h,
-  cases h with w hw,
-  cases hw with hc he,
+  cases h with s h,
+  cases h with t h,
+  cases h with w he,
   rw walk.is_eulerian at he,
 
   have heqsum : list.length (w.edges.filter (λ e, e.1 = v)) = list.length (w.edges.filter (λ e, e.2 = v)) := sorry,
 
-  have : g.degree v = g.sum (λ u, w.edges.count (u, v) + w.edges.count (v, u)) := sorry,
+  have : g.degree v = g.sum (λ u, w.edges.count (u, v) + w.edges.count (v, u)),
+  { rw [degree, multigraph.sum, multigraph.sum],
+    induction g.V.val with l; simp,
+    induction l with x ih l; simp *, },
 
   have hquant : Π (l : list (α × α)), l <:+ w.edges → g.sum (λ u, l.count (u, v)) = list.length (l.filter (λ e, e.2 = v)),
   { intros l hsuff,
     induction l with x l ih,
     { simp [list.count_nil, multigraph.sum], },
     have : x ∈ w.edges, from list.mem_of_mem_suffix hsuff (by simp),
-    have hx : x ∈ g, from w.h.left this,
+    -- have hx : x ∈ g, from w.h.left this,
     { conv in (list.count _ _) { rw list.count_cons' },
       rw multigraph.sum,
       rw multiset.sum_map_add,
