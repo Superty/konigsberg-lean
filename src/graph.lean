@@ -20,11 +20,7 @@ variable {α : Type}
 variable {hinhabited : inhabited α}
 
 @[simp]
-def has_edge (g : multigraph α) (u v : α) : Prop := g.edges u v ≠ 0
-@[simp]
-instance : has_mem (α × α) (multigraph α) := ⟨λ e g, has_edge g e.1 e.2⟩
-
-def E (g : multigraph α) := {e : α × α  // g.has_edge e.1 e.2}
+instance : has_mem (α × α) (multigraph α) := ⟨λ e g, e ∈ g.E⟩
 
 @[simp]
 theorem no_self_loops_mem (g : multigraph α) (v : α) : (v, v) ∉ g :=
@@ -249,7 +245,6 @@ begin
   }
 end
 
-
 -- lemma bar : ∀ (s t : α) (w : walk g s t), ℕ
 -- | _ _  (walk.nil g s)          := 0
 -- | _ _ (walk.cons s _ _ hmem l) :=
@@ -258,9 +253,58 @@ end
 --   | (walk.nil g _) :=
 --   | (walk.cons s v t hmem l) :=
 
-theorem quant_countp (l : list α) (p : α → Prop) : g.sum 
+-- theorem quant_countp (l : list α) (p : α → Prop) : g.sum 
 
--- g.sum (λ u, ) = 
+-- g.sum (λ u, l.countp ) = 
+
+-- list.countp (λ (v : α), ∃ (u : α), u ∈ s ∧ r u v) (x :: l)
+-- list.countp (λ (v : α), ∃ (u : α), u ∈ s ∧ r u v) (x :: l)
+
+-- set_option pp.implicit true
+
+variable β : Type
+
+lemma sum_list (l : list β) (s : multiset α) (r : α → β → Prop) (hins : ∀ (u : α) (v ∈ l), r u v → u ∈ s) (nodup : ∀ (u : α) (v : β) (w : α), r u v → w ≠ u → ¬ r w v) : multiset.sum (s.map (λ u, l.countp (r u))) = l.countp (λ v, ∃ u, r u v) :=
+begin
+  induction l with x l ih,
+  simp,
+  simp [list.countp_cons],
+  simp [ih (λ u v vmem, hins u v (by simp [vmem]))],
+  rw ← multiset.card_filter_eq_sum_map,
+  rw ← multiset.countp_eq_card_filter,
+  by_cases (∃ u, r u x),
+  { simp [h],
+    cases h with u hu,
+    have : s.countp (λ (a : α), r a x) ≠ 0,
+    { intro h,
+
+    }
+  }
+  -- induction s with s,
+  -- { simp *,
+  --   cases h with u hu,
+  --   induction s with y s hs,
+
+  -- }
+end
+
+-- lemma sum_list (l : list α) (s : multiset α) (f : α → α) (hinj : function.injective f) : multiset.sum (s.map (λ u, l.count (f u))) = l.countp (λ v, ∃ u, v = f u) :=
+-- begin
+--   induction l with x l ih,
+--   simp,
+--   simp [list.countp_cons, ih],
+--   rw list.countp_cons,
+--   -- rw @list.countp_cons α x l (λ (v : α), ∃ (u : α), u ∈ s ∧ r u v),
+
+--   by_cases (∃ u, r u x),
+--   -- simp *,
+--   -- induction s with s,
+--   -- { simp *,
+--   --   cases h with u hu,
+--   --   induction s with y s hs,
+
+--   -- }
+-- end
 
 lemma even_degree_of_eulerian (h : g.is_eulerian) : ∀ v : α, 2 ∣ g.degree v :=
 begin
