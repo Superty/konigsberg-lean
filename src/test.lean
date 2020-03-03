@@ -1,11 +1,9 @@
-import data.list
-noncomputable theory
-open_locale classical
-universe u
-variables (α : Type u) (a : α) (l : list α)
-theorem count_eq_countp {h : decidable_pred (λ x, a = x)} : l.count a = l.countp (λ x, a = x) := sorry
-theorem count_eq_countp' {h : decidable_pred (λ x, a = x)}  : l.count a = l.countp (λ x, x = a) :=
-begin
-  conv in (_ = a) { rw eq_comm, },
-  exact (@count_eq_countp _ a l h), -- error, works with convert
-end
+variable {α : Type}
+inductive foo : α → Type
+| one (a : α) : foo a
+| cons (a b : α) (f : foo b) : foo a
+
+
+def length : Π (a : α) (f : foo a), ℕ
+| _ (foo.one a) := 1
+| _ (foo.cons a b f) := 1 + length b f
