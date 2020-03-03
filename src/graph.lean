@@ -102,32 +102,12 @@ def sum (f : α → ℕ) : ℕ := multiset.sum (multiset.map f g.V.val)
 
 def degree (v : α) : ℕ := g.E.countp (λ e, ∃ u, e = (u, v) ∨ e = (v, u))
 
-theorem degree_eq_zero_of_non_vertex {v : α} (h : v ∉ g.V) : g.degree v = 0 :=
-begin
-  rw degree,
-  have : ∀ u, g.edges v u = 0,
-  { intro u,
-    by_contradiction,
-    have : v ∈ g.V,
-    { have : v ∈ g.V ∧ u ∈ g.V, from g.valid_edges a,
-      cases this,
-      assumption, },
-    exact h this,
-  },
-  have : g.edges v = λ u, 0,
-  { apply funext,
-    assumption,
-  },
-  rw this,
-  exact multiset.sum_map_zero,
-end
-
 def reachable : α → α → Prop := relation.refl_trans_gen (λ u v, (u, v) ∈ g)
 @[reducible]
 def is_connected : Prop := ∀ u v ∈ g.V, reachable g u v
 
 @[reducible]
-def is_eulerian : Prop := ∃ (s : α) (w : walk g s s), w.is_eulerian
+def is_eulerian : Prop := ∃ (s t : α) (w : walk g s t), w.is_eulerian
 end multigraph
 
 open multigraph
@@ -281,19 +261,34 @@ theorem countp_false_eq_zero {s : multiset α} : s.countp (λ x, false) = 0 := b
 
 end multiset
 
-namespace nat
--- we don't seem to have cancellative monoids in mathlib yet
-variables a b : nat
-@[simp]
-lemma add_left_eq_self : a + b = b ↔ a = 0 :=
-⟨λ h, @add_right_cancel _ _ a b 0 (by simp [h]), λ h, by simp [h]⟩  
+-- namespace nat
+-- -- we don't seem to have cancellative monoids in mathlib yet
+-- variables a b : nat
+-- @[simp]
+-- lemma add_left_eq_self : a + b = b ↔ a = 0 :=
+-- ⟨λ h, @add_right_cancel _ _ a b 0 (by simp [h]), λ h, by simp [h]⟩  
 
-@[simp]
-lemma add_right_eq_self : a + b = a ↔ b = 0 :=
-⟨λ h, @add_left_cancel _ _ a b 0 (by simp [h]), λ h, by simp [h]⟩
-end nat
+-- @[simp]
+-- lemma add_right_eq_self : a + b = a ↔ b = 0 :=
+-- ⟨λ h, @add_left_cancel _ _ a b 0 (by simp [h]), λ h, by simp [h]⟩
 
-lemma two_dvd_add_self {x : ℕ} : 2 ∣ x + x := by {rw [← one_mul x, ← add_mul], simp}
+-- -- @[simp]
+-- -- lemma add_self_eq_double : a + a = 2*a :=
+-- --   ring,
+-- -- end
+-- end nat
+
+-- lemma two_dvd_add_self {x : ℤ} : (x + x) % 2 = 0 :=
+-- begin
+-- end
+
+-- lemma two_dvd_add_self {x : ℕ} : (x + x) % 2 = 0 := by {ring, simp}
+-- lemma not_two_dvd_succ_add_self {x : ℕ} : (1 + (x + x)) % 2 = 1 := 
+-- begin
+--   ring,
+--   simp,
+--   refl,
+-- end
 
 def foo : α → α →  list α → α
 | _ y []       := y
@@ -336,14 +331,14 @@ open multigraph
 
 variable {β : Type}
 
-lemma nonterm_vert_in_walk (x t : α) : ∀ (s : α) (wlk : walk g s t),
+lemma vert_in_walk (x : α) : ∀ (s t : α) (wlk : walk g s t),
     wlk.edges.countp (λ e, ∃ u, e = (x, u)) + ite (t = x) 1 0 =
     wlk.edges.countp (λ e, ∃ u, e = (u, x)) + ite (s = x) 1 0
-| _ (walk.nil g s)           := by simp
-| _ (walk.cons s v t hmem w) :=
+| _ _ (walk.nil g s)           := by simp
+| _ _ (walk.cons s v t hmem w) :=
 have hdec : @list.length (α × α) (@walk.edges α g v t w) < 1 + @list.length (α × α) (@walk.edges α g v t w), by linarith,
 begin
-  have indrw := nonterm_vert_in_walk v w,
+  have indrw := vert_in_walk v t w,
   by_cases (s = x),
   { have hne : v ≠ x,
     { rw h at hmem,
@@ -359,7 +354,7 @@ begin
     exact indrw,
   },
 end
-using_well_founded {rel_tac := λ _ _, `[exact ⟨_, measure_wf (λ psig, psig.2.edges.length)⟩], dec_tac := well_founded_tactics.default_dec_tac'}
+using_well_founded {rel_tac := λ _ _, `[exact ⟨_, measure_wf (λ psig, psig.2.2.edges.length)⟩], dec_tac := well_founded_tactics.default_dec_tac'}
 -- , dec_tac := `[well_founded_tactics.default_dec_tac, suffices : @list.length (α × α) (@walk.edges α g v t w) < 1 + @list.length (α × α) (@walk.edges α g v t w), convert this, exact hwf ] }
 --   by { simp [list.countp_cons, *], by_cases (s = x); by_cases (v = x); simp *, }
 -- | _ _  (walk.cons s _ _ hmem (walk.cons v w t hmem2 l)) :=
@@ -389,8 +384,8 @@ using_well_founded {rel_tac := λ _ _, `[exact ⟨_, measure_wf (λ psig, psig.2
 -- end
 
 
-lemma vert_in_walk (x : α) (s : α) (w : walk g s s) :
-    w.edges.countp (λ e, ∃ u, e = (x, u)) = w.edges.countp (λ e, ∃ u, e = (u, x)) := sorry
+-- lemma vert_in_walk (x : α) (s : α) (w : walk g s s) :
+--     w.edges.countp (λ e, ∃ u, e = (x, u)) = w.edges.countp (λ e, ∃ u, e = (u, x)) := sorry
 -- begin
 --   by_cases s = x,
 --   { cases w with _ _ v _ hmem l,
@@ -648,17 +643,40 @@ begin
   finish,
 end
 
-lemma even_degree_of_eulerian (h : g.is_eulerian) : ∀ v : α, 2 ∣ g.degree v :=
+lemma degree_constraint_of_eulerian (h : g.is_eulerian) : (∀ v ∈ g.V, g.degree v % 2 = 0) ∨ ∃ s t, g.degree s % 2 = 1 ∧ g.degree t % 2 = 1 ∧ (∀ v ∈ g.V, s ≠ v → t ≠ v → g.degree v % 2 = 0)  :=
 begin
-  intro v,
-  by_cases hv : v ∈ g.V,
-  swap,
-  { simp [g.degree_eq_zero_of_non_vertex hv], },
   rw is_eulerian at h,
   cases h with s h,
+  cases h with t h,
   cases h with w he,
-  rw walk.is_eulerian at he,
+  by_cases hcase : s = t,
+  { left,
+    intros v hmem,
+    have hcnt := vert_in_walk g v _ _ w,
+    simp [hcase] at hcnt,
+    rw degree_of_eulerian_walk _ he,
+    by_cases htv : t = v; simp [htv] at hcnt; rw hcnt; ring; simp,
+  },
+  right,
+  use s, use t,
+  split,
+  { have hcnt := vert_in_walk g s _ _ w,
+    simp [ne.symm hcase] at hcnt,
+    rw degree_of_eulerian_walk _ he,
+    simp [hcnt],
+    ring, simp, refl,
+  },
+  split,
+  { have hcnt := vert_in_walk g t _ _ w,
+    simp [hcase] at hcnt,
+    rw degree_of_eulerian_walk _ he,
+    simp [eq.symm hcnt],
+    ring, simp, refl,
+  },
+  intros v hmem hnes hnet,
+  have hcnt := vert_in_walk g v _ _ w,
   rw degree_of_eulerian_walk _ he,
-  rw vert_in_walk,
-  exact two_dvd_add_self,
+  simp [hnes, hnet] at hcnt,
+  simp [hcnt],
+  ring, simp, 
 end
