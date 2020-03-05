@@ -1,9 +1,11 @@
-variable {α : Type}
-inductive foo : α → Type
-| one (a : α) : foo a
-| cons (a b : α) (f : foo b) : foo a
+import data.multiset
+noncomputable theory
+open_locale classical
 
+-- set_option pp.implicit true
 
-def length : Π (a : α) (f : foo a), ℕ
-| _ (foo.one a) := 1
-| _ (foo.cons a b f) := 1 + length b f
+example : list.countp (λ (e : ℕ × ℕ), ∃ (u : ℕ), e = (u, 0) ∨ e = (0, u))
+      [(0, 1), (0, 1), (1, 2), (1, 2), (0, 3), (1, 3), (2, 3)] = 3 :=
+begin
+  simp,
+end

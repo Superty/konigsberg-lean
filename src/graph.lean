@@ -180,8 +180,76 @@ by {induction l with x l ih, simp, simp [ih]}
 end list
 
 namespace multiset
+theorem countp_cons (s : multiset α) (a : α) (p : α → Prop) [∀ a, decidable (p a)] : countp p (a :: s) = ite (p a) 1 0 + countp p s :=
+by {by_cases p a; simp [h],}
+
 theorem countp_false_eq_zero {s : multiset α} : s.countp (λ x, false) = 0 := by {induction s; simp, induction s with x l ih, simp, simp [ih]}
+
+theorem countp_eq_zero_of_false_of_mem {s : multiset α} {p : α → Prop} (h : ∀ x ∈ s, ¬ p x) : s.countp p = 0 :=
+begin
+  rcases s with s,
+  simp * at *,
+  revert h,
+  induction s with x l ih; simp [list.countp_cons],
+  intros hx hl,
+  split,
+  { exact ih hl, },
+  { simp [hx], },
+end
 end multiset
+
+
+namespace nat
+  @[simp]
+  theorem eq_of_succ_eq_succ (n m : ℕ) : n.succ = m.succ ↔ n = m := by {split, intro h, injection h, intro h, apply_fun nat.succ at h, exact h, }
+  @[simp]
+  theorem not_succ_eq_zero (n : ℕ) : n.succ ≠ 0 := by {intro h, injection h }
+  @[simp]
+  theorem not_zero_eq_succ (n : ℕ) : 0 ≠ n.succ := by {intro h, injection h }
+
+  -- @[simp]
+  -- theorem mod_add (a b m : ℤ) : ((a % m) + (b % m)) % m = (a + b) % m :=
+  -- begin
+  --   rw int.mod_add_mod,
+  --   rw int.mod_mod_add,
+  -- end
+
+  -- @[simp]
+  -- theorem add_mul_mod (a b m : ℕ) : (a + m * b) % m = a % m := by simp
+
+  -- @[simp]
+  -- theorem add_mod_mod (a b m : ℕ) : (a + b % m) % m = (a + b) % m :=
+  -- begin
+  --   conv in (a + b) {
+  --     rw ← nat.mod_add_div b m,
+  --   },
+  --   rw ← nat.add_assoc,
+  --   rw add_mul_mod,
+  -- end
+
+  -- @[simp]
+  -- theorem mod_add_mod (a b m : ℕ) : (a % m + b) % m = (a + b) % m :=
+  -- begin
+  --   simp,
+  -- end
+
+  @[simp]
+  theorem even_of_succ_odd (n : ℕ) : (n + 1) % 2 = 1 ↔ n % 2 = 0 := sorry
+  @[simp]
+  theorem odd_of_succ_even (n : ℕ) : (n + 1) % 2 = 0 ↔ n % 2 = 1 := sorry
+
+  @[simp]
+  theorem even_of_not_odd (n : ℕ) : n % 2 ≠ 1 ↔ n % 2 = 0 := sorry
+
+  @[simp]
+  theorem odd_of_not_even (n : ℕ) : n % 2 ≠ 1 ↔ n % 2 = 0 := sorry
+  -- begin
+  --   intro h,
+  --   rw ← nat.mod_add_mod at h,
+  --   by_contradiction,
+  --   have : n % 2 = 1,
+  -- end
+end nat
 
 open multigraph
 variable {β : Type}
@@ -386,7 +454,8 @@ begin
   finish,
 end
 
-lemma degree_constraint_of_eulerian (h : g.is_eulerian) : (∀ v ∈ g.V, g.degree v % 2 = 0) ∨ ∃ s t, g.degree s % 2 = 1 ∧ g.degree t % 2 = 1 ∧ (∀ v ∈ g.V, s ≠ v → t ≠ v → g.degree v % 2 = 0)  :=
+lemma degree_constraint_of_eulerian (h : g.is_eulerian) :
+g.V.val.countp (λ v, g.degree v % 2 = 1) = 0 ∨ g.V.val.countp (λ v, g.degree v % 2 = 1) = 2 :=
 begin
   rw is_eulerian at h,
   cases h with s h,
@@ -394,11 +463,14 @@ begin
   cases h with w he,
   by_cases hcase : s = t,
   { left,
-    intros v hmem,
-    have hcnt := vert_in_walk g v _ _ w,
-    simp [hcase] at hcnt,
-    rw degree_of_eulerian_walk _ he,
-    by_cases htv : t = v; simp [htv] at hcnt; rw hcnt; ring; simp,
+    have : ∀ v ∈ g.V, g.degree v % 2 = 0,
+    { intros v hmem,
+      have hcnt := vert_in_walk g v _ _ w,
+      simp [hcase] at hcnt,
+      rw degree_of_eulerian_walk _ he,
+      by_cases htv : t = v; simp [htv] at hcnt; rw hcnt; ring; simp, },
+      conv at this in (_ = 0) { rw ← nat.even_of_not_odd, },
+      exact multiset.countp_eq_zero_of_false_of_mem this,
   },
   right,
   use s, use t,
@@ -423,3 +495,53 @@ begin
   simp [hcnt],
   ring, simp, 
 end
+
+
+namespace konigsberg
+
+@[simp]
+def V : finset ℕ := {0, 1, 2, 3}
+@[simp]
+def E : multiset (ℕ × ℕ) :=
+    (0, 1) :: (0, 1) :: (1, 2) :: (1, 2) :: (0, 3) :: (1, 3) :: (2, 3) :: {}
+lemma valid_edges : ∀ e : ℕ × ℕ, e ∈ E → e.1 ∈ V ∧ e.2 ∈ V :=
+begin
+  intros e hmem,
+  rw V,
+  rw E at hmem,
+  fin_cases hmem; simp,
+end
+lemma no_self_loops : ∀ u v : ℕ, (u, v) ∈ E → u ≠ v :=
+begin
+  intros u v hmem heq,
+  rw heq at hmem,
+  rw E at hmem,
+  fin_cases hmem; simp at hmem; finish,
+end
+
+@[simp]
+def G := multigraph.mk V E valid_edges no_self_loops
+
+lemma all_degrees_odd : ∀ v ∈ G.V, G.degree v % 2 = 1 :=
+begin
+  intros v hmem,
+  simp at hmem,
+  rcases hmem with rfl | rfl | rfl | rfl; unfold degree; simp,
+end
+
+theorem konigsberg_bridge : ¬ G.is_eulerian :=
+begin
+  intro h,
+  have hdeg := degree_constraint_of_eulerian _ h,
+  cases hdeg,
+  { have hdeg0 := hdeg 0 (by simp),
+    rw all_degrees_odd 0 (by simp) at hdeg0,
+    simp at hdeg0,
+    exact hdeg0,},
+
+  -- cases hdeg with s hdeg,
+  -- cases hdeg with t hdeg,
+
+end
+
+end konigsberg
