@@ -31,7 +31,7 @@ def is_walk (g : multigraph α) (l : list (α × α)): Prop :=
 (∀{e}, e ∈ l → e ∈ g) ∧  walk_vertices_match g l
 
 inductive walk (g : multigraph α) : α → α → Type
-| nil : Π (v : α), walk v v
+| nil : Π (v ∈ g.V), walk v v
 | cons : Π (u v w : α) (hmem : (u, v) ∈ g) (l : walk v w), walk u w
 
 namespace walk
@@ -46,6 +46,14 @@ def append : Π {s t u : α} (wst : walk g s t) (wtu : walk g t u), walk g s u
 | _ _ _ (nil g _) w := w
 | _ _ u (cons s v t hmem w1) w2 := cons s v u hmem (append w1 w2)
 
+def s_mem : Π {s t : α} (w : walk g s t), s ∈ g.V
+| _ _ (nil g t) := t
+| _ _ (cons s v t hmem l) := (g.valid_edges _ hmem).left
+
+def t_mem : Π {s t : α} (w : walk g s t), t ∈ g.V
+| _ _ (nil g t) := t
+| _ _ (cons s v t hmem l) := t_mem l
+
 def length {u v : α} : walk g u v → ℕ := λ w, w.edges.length
 
 variables {s t : α}
@@ -54,7 +62,7 @@ variable w : walk g s t
 lemma valid_edge_of_mem_walk (e : α × α) : e ∈ w.edges → e ∈ g :=
 begin
   intro hmem,
-  induction w with _ u v w hemem l ih,
+  induction w with _ _ u v w hemem l ih,
   { simp at hmem, exfalso, exact hmem },
   simp at hmem,
   cases hmem with hl hr,
@@ -86,7 +94,6 @@ variable {α : Type}
 variable (g : multigraph α)
 variable (hcon : g.is_connected)
 
-
 @[simp]
 lemma fun_abstract {α β : Type} (f : α → β) : f = (λ x : α, f x) := rfl
 
@@ -95,8 +102,9 @@ universe u
 variable (a : α)
 variable (l : list α)
 
-theorem countp_cons (p : α → Prop) [∀ a, decidable (p a)] : countp p (a :: l) = ite (p a) 1 0 +  countp p l :=
-by {by_cases p a; rw countp; simp [h], ring,}
+theorem countp_cons (p : α → Prop) [∀ a, decidable (p a)] :
+    countp p (a :: l) = ite (p a) 1 0 +  countp p l :=
+    by {by_cases p a; rw countp; simp [h], ring,}
 
 theorem length_filter_eq_sum_map {α : Type} (l : list α) (p : α → Prop) : length (filter p l) = sum (map (λ x, ite (p x) 1 0) l) :=
 begin
@@ -128,7 +136,7 @@ begin
   simp [h x],
 end
 
-theorem countp_split {α : Type} (l : list α) (p : α → Prop) (q : α → Prop) : l.countp p = (l.filter q).countp p + (l.filter (λ a, ¬ q a)).countp p :=
+theorem countp_split {α : Type} {l : list α} {p q : α → Prop} : l.countp p = (l.filter q).countp p + (l.filter (λ a, ¬ q a)).countp p :=
 begin
   induction l with x l ih,
   { simp, },
@@ -176,14 +184,15 @@ begin
 end
 
 theorem countp_false_eq_zero {l : list α} : l.countp (λ x, false) = 0 :=
-by {induction l with x l ih, simp, simp [ih]}
+    by {induction l with x l ih, simp, simp [ih]}
 end list
 
 namespace multiset
 theorem countp_cons (s : multiset α) (a : α) (p : α → Prop) [∀ a, decidable (p a)] : countp p (a :: s) = ite (p a) 1 0 + countp p s :=
-by {by_cases p a; simp [h],}
+    by {by_cases p a; simp [h]}
 
-theorem countp_false_eq_zero {s : multiset α} : s.countp (λ x, false) = 0 := by {induction s; simp, induction s with x l ih, simp, simp [ih]}
+theorem countp_false_eq_zero {s : multiset α} : s.countp (λ x, false) = 0 :=
+    by {induction s; simp, induction s with x l ih, simp, simp [ih]}
 
 theorem countp_eq_zero_of_false_of_mem {s : multiset α} {p : α → Prop} (h : ∀ x ∈ s, ¬ p x) : s.countp p = 0 :=
 begin
@@ -196,59 +205,121 @@ begin
   { exact ih hl, },
   { simp [hx], },
 end
+
+theorem countp_eq_card_of_true_of_mem {s : multiset α} {p : α → Prop} (h : ∀ x ∈ s, p x) : s.countp p = s.card :=
+begin
+  rcases s with l,
+  simp * at *,
+  revert h,
+  induction l with x l ih; simp [list.countp_cons],
+  intros hx hl,
+  simp [hx, ih hl],
+end
+
+theorem countp_split {α : Type} (s : multiset α) {p : α → Prop} (q : α → Prop) : s.countp p = (s.filter q).countp p + (s.filter (λ a, ¬ q a)).countp p :=
+begin
+  rcases s with l,
+  exact list.countp_split,
+end
+
+theorem not_mem_of_countp_eq_zero {α : Type} (s : multiset α) (p : α → Prop) : s.countp p = 0 ↔ ∀ a ∈ s, ¬ p a :=
+begin
+  rcases s with l,
+  simp [list.not_mem_of_countp_eq_zero],
+end
 end multiset
 
+namespace finset
+
+@[simp]
+def countp (p : α → Prop) [decidable_pred p] (s : finset α) : ℕ := s.val.countp p
+
+theorem filter_eq_multiset_filter (p : α → Prop) [decidable_pred p] (s : finset α) : (s.filter p).val = s.val.filter p := by {rcases s, simp}
+
+theorem multiset_card_eq_card (s : finset α) : s.val.card = s.card :=
+by {rcases s, simp [card] }
+
+lemma eq_of_subset_of_subset {s t : finset α} (h₁ : s ⊆ t) (h₂ : t ⊆ s) : s = t :=
+(eq_of_subset_of_card_le h₁ (card_le_of_subset h₂))
+
+end finset
 
 namespace nat
-  @[simp]
-  theorem eq_of_succ_eq_succ (n m : ℕ) : n.succ = m.succ ↔ n = m := by {split, intro h, injection h, intro h, apply_fun nat.succ at h, exact h, }
-  @[simp]
-  theorem not_succ_eq_zero (n : ℕ) : n.succ ≠ 0 := by {intro h, injection h }
-  @[simp]
-  theorem not_zero_eq_succ (n : ℕ) : 0 ≠ n.succ := by {intro h, injection h }
+@[simp]
+theorem eq_of_succ_eq_succ (n m : ℕ) : n.succ = m.succ ↔ n = m := by {split, intro h, injection h, intro h, apply_fun nat.succ at h, exact h, }
+@[simp]
+theorem not_succ_eq_zero (n : ℕ) : n.succ ≠ 0 := by {intro h, injection h }
+@[simp]
+theorem not_zero_eq_succ (n : ℕ) : 0 ≠ n.succ := by {intro h, injection h }
 
-  -- @[simp]
-  -- theorem mod_add (a b m : ℤ) : ((a % m) + (b % m)) % m = (a + b) % m :=
-  -- begin
-  --   rw int.mod_add_mod,
-  --   rw int.mod_mod_add,
-  -- end
+-- @[simp]
+-- theorem mod_add (a b m : ℤ) : ((a % m) + (b % m)) % m = (a + b) % m :=
+-- begin
+--   rw int.mod_add_mod,
+--   rw int.mod_mod_add,
+-- end
 
-  -- @[simp]
-  -- theorem add_mul_mod (a b m : ℕ) : (a + m * b) % m = a % m := by simp
+@[simp]
+theorem add_mul_mod (a b m : ℕ) : (a + m * b) % m = a % m := by simp
 
-  -- @[simp]
-  -- theorem add_mod_mod (a b m : ℕ) : (a + b % m) % m = (a + b) % m :=
-  -- begin
-  --   conv in (a + b) {
-  --     rw ← nat.mod_add_div b m,
-  --   },
-  --   rw ← nat.add_assoc,
-  --   rw add_mul_mod,
-  -- end
+@[simp]
+theorem add_mod_mod (a b m : ℕ) : (a + b % m) % m = (a + b) % m :=
+begin
+  conv in (a + b) {
+    rw ← nat.mod_add_div b m,
+  },
+  rw ← nat.add_assoc,
+  rw add_mul_mod,
+end
 
-  -- @[simp]
-  -- theorem mod_add_mod (a b m : ℕ) : (a % m + b) % m = (a + b) % m :=
-  -- begin
-  --   simp,
-  -- end
+@[simp]
+theorem mod_add_mod (a b m : ℕ) : (a % m + b) % m = (a + b) % m :=
+begin
+  simp,
+end
 
-  @[simp]
-  theorem even_of_succ_odd (n : ℕ) : (n + 1) % 2 = 1 ↔ n % 2 = 0 := sorry
-  @[simp]
-  theorem odd_of_succ_even (n : ℕ) : (n + 1) % 2 = 0 ↔ n % 2 = 1 := sorry
+@[simp]
+theorem even_of_not_odd (n : ℕ) : ¬ n % 2 = 1 ↔ n % 2 = 0 :=
+begin
+  have := nat.mod_two_eq_zero_or_one n,
+  split; intro h; finish,
+end
 
-  @[simp]
-  theorem even_of_not_odd (n : ℕ) : n % 2 ≠ 1 ↔ n % 2 = 0 := sorry
+@[simp]
+theorem odd_of_not_even (n : ℕ) : ¬ n % 2 = 0 ↔ n % 2 = 1 :=
+begin
+  have := nat.mod_two_eq_zero_or_one n,
+  split; intro h; finish,
+end
 
-  @[simp]
-  theorem odd_of_not_even (n : ℕ) : n % 2 ≠ 1 ↔ n % 2 = 0 := sorry
-  -- begin
-  --   intro h,
-  --   rw ← nat.mod_add_mod at h,
-  --   by_contradiction,
-  --   have : n % 2 = 1,
-  -- end
+@[simp]
+theorem one_mod_two_eq_one : 1 % 2 = 1 := nat.mod_eq_of_lt (by linarith)
+@[simp]
+theorem zero_mod_two_eq_zero : 0 % 2 = 0 := nat.mod_eq_of_lt (by linarith)
+
+@[simp]
+theorem even_of_succ_odd (n : ℕ) : (n + 1) % 2 = 1 ↔ n % 2 = 0 :=
+begin
+  rw ← mod_add_mod,
+  split; intro h,
+  { by_contradiction hn,
+    simp at hn,
+    simp [hn] at h,
+    exact h, },
+  simp [h],
+end
+
+@[simp]
+theorem odd_of_succ_even (n : ℕ) : (n + 1) % 2 = 0 ↔ n % 2 = 1 :=
+begin
+  rw ← mod_add_mod,
+  split; intro h,
+  { by_contradiction hn,
+    simp at hn,
+    simp [hn] at h,
+    exact h, },
+  simp [h],
+end
 end nat
 
 open multigraph
@@ -307,8 +378,8 @@ begin
   intros l1 l2 hlen h,
   by_cases hex : ∃ a, ∃ b ∈ l1, r a b,
   { cases hex with a ha,
-    rw list.countp_split l1 _ (λ b, r a b),
-    rw list.countp_split l2 _ (λ b, r a b),
+    rw @list.countp_split _ l1 _ (λ b, r a b),
+    rw @list.countp_split _ l2 _ (λ b, r a b),
     repeat {rw @list.countp_filter _ _ _ (λ (b : β), r a b) _ _},
     simp [-list.countp_filter],
     suffices : list.countp (λ (b : β), ∃ (a : α), r a b) (list.filter (λ (a_1 : β), ¬r a a_1) l1) + list.countp (r a) l1 =
@@ -404,7 +475,8 @@ begin
   exact injective_count_aux len nodup l1 l2 (by simp [len]),
 end
 
-lemma count_plus (l : list α) (p q : α → Prop) (nodup : ∀ a ∈ l, ¬ (p a ∧ q a)) : l.countp p + l.countp q = l.countp (λ a, p a ∨ q a) :=
+lemma count_plus (l : list α) (p q : α → Prop) (nodup : ∀ a ∈ l, ¬ (p a ∧ q a)) :
+l.countp p + l.countp q = l.countp (λ a, p a ∨ q a) :=
 begin
   induction l with a l1 ih,
   { simp },
@@ -455,12 +527,13 @@ begin
 end
 
 lemma degree_constraint_of_eulerian (h : g.is_eulerian) :
-g.V.val.countp (λ v, g.degree v % 2 = 1) = 0 ∨ g.V.val.countp (λ v, g.degree v % 2 = 1) = 2 :=
+g.V.countp (λ v, g.degree v % 2 = 1) = 0 ∨ g.V.countp (λ v, g.degree v % 2 = 1) = 2 :=
 begin
   rw is_eulerian at h,
   cases h with s h,
   cases h with t h,
   cases h with w he,
+  unfold finset.countp,
   by_cases hcase : s = t,
   { left,
     have : ∀ v ∈ g.V, g.degree v % 2 = 0,
@@ -473,29 +546,62 @@ begin
       exact multiset.countp_eq_zero_of_false_of_mem this,
   },
   right,
-  use s, use t,
-  split,
+  -- use s, use t,
+  -- split,
+  rw multiset.countp_split g.V.val (λ x, s = x ∨ t = x),
+  simp,
+  have : ∀ v ∈ g.V, ¬ (s = v ∨ t = v) → g.degree v % 2 = 0,
+  { intros v hmem hne,
+    rw not_or_distrib at hne,
+    cases hne with hnes hnet,
+    have hcnt := vert_in_walk g v _ _ w,
+    rw degree_of_eulerian_walk _ he,
+    simp [hnes, hnet] at hcnt,
+    simp [hcnt],
+    ring, simp, },
+  have : ∀ v ∈ g.V, ¬ (degree g v % 2 = 1 ∧ ¬(s = v ∨ t = v)),
+  { intros v hmem h,
+    cases h with h hne,
+    rw ← nat.odd_of_not_even at h,
+    exact absurd (this v hmem hne) h,
+  },
+  suffices : multiset.countp (λ (a : α), degree g a % 2 = 1 ∧ (s = a ∨ t = a)) g.V.val +
+      multiset.countp (λ (a : α), degree g a % 2 = 1 ∧ ¬(s = a ∨ t = a)) g.V.val =
+    2,
+  { convert this, },
+  simp [multiset.countp_eq_zero_of_false_of_mem this],
+  rw multiset.countp_eq_card_filter,
+  rw ← finset.filter_eq_multiset_filter,
+
+  have hsdeg : g.degree s % 2 = 1,
   { have hcnt := vert_in_walk g s _ _ w,
     simp [ne.symm hcase] at hcnt,
     rw degree_of_eulerian_walk _ he,
     simp [hcnt],
-    ring, simp, refl,
-  },
-  split,
+    ring, simp, },
+  have htdeg : g.degree t % 2 = 1,
   { have hcnt := vert_in_walk g t _ _ w,
     simp [hcase] at hcnt,
     rw degree_of_eulerian_walk _ he,
     simp [eq.symm hcnt],
-    ring, simp, refl,
-  },
-  intros v hmem hnes hnet,
-  have hcnt := vert_in_walk g v _ _ w,
-  rw degree_of_eulerian_walk _ he,
-  simp [hnes, hnet] at hcnt,
-  simp [hcnt],
-  ring, simp, 
-end
+    ring, simp, },
 
+  have : finset.filter (λ (a : α), degree g a % 2 = 1 ∧ (s = a ∨ t = a)) g.V = {s, t},
+  { apply finset.eq_of_subset_of_subset; rw finset.subset_iff; intros x hmem,
+    { rw finset.mem_filter at hmem,
+    rcases hmem with ⟨hmem, hdeg, hcase | hcase⟩; simp [hcase],},
+    { simp at hmem,
+      cases hmem; rw hmem,
+      { simp [htdeg, w.t_mem], },
+      { simp [hsdeg, w.s_mem], }, },
+  },
+  rw this,
+  rw finset.multiset_card_eq_card,
+  simp,
+  change s ≠ t at hcase,
+  rw @finset.card_insert_of_not_mem _ _ t (finset.singleton s) (by simp [ne_comm.mp hcase]),
+  simp [hcase],
+end
 
 namespace konigsberg
 
@@ -504,6 +610,7 @@ def V : finset ℕ := {0, 1, 2, 3}
 @[simp]
 def E : multiset (ℕ × ℕ) :=
     (0, 1) :: (0, 1) :: (1, 2) :: (1, 2) :: (0, 3) :: (1, 3) :: (2, 3) :: {}
+
 lemma valid_edges : ∀ e : ℕ × ℕ, e ∈ E → e.1 ∈ V ∧ e.2 ∈ V :=
 begin
   intros e hmem,
@@ -511,6 +618,7 @@ begin
   rw E at hmem,
   fin_cases hmem; simp,
 end
+
 lemma no_self_loops : ∀ u v : ℕ, (u, v) ∈ E → u ≠ v :=
 begin
   intros u v hmem heq,
@@ -529,19 +637,21 @@ begin
   rcases hmem with rfl | rfl | rfl | rfl; unfold degree; simp,
 end
 
-theorem konigsberg_bridge : ¬ G.is_eulerian :=
+lemma four_odd_degree_verts : G.V.countp (λ v, G.degree v % 2 = 1) = 4 :=
+begin
+  unfold finset.countp,
+  rw multiset.countp_eq_card_of_true_of_mem,
+  { simp, },
+  exact all_degrees_odd,
+end
+
+theorem no_euler_walk_in_konigsberg_bridge : ¬ G.is_eulerian :=
 begin
   intro h,
   have hdeg := degree_constraint_of_eulerian _ h,
-  cases hdeg,
-  { have hdeg0 := hdeg 0 (by simp),
-    rw all_degrees_odd 0 (by simp) at hdeg0,
-    simp at hdeg0,
-    exact hdeg0,},
-
-  -- cases hdeg with s hdeg,
-  -- cases hdeg with t hdeg,
-
+  rw four_odd_degree_verts at hdeg,
+  simp at hdeg,
+  exact hdeg,
 end
 
 end konigsberg
