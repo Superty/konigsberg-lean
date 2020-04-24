@@ -1,0 +1,2 @@
+# konigsberg-lean
+Proof of the resolution to the Konigsberg bridge problem in lean.
