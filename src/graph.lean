@@ -252,13 +252,6 @@ theorem not_succ_eq_zero (n : ℕ) : n.succ ≠ 0 := by {intro h, injection h }
 @[simp]
 theorem not_zero_eq_succ (n : ℕ) : 0 ≠ n.succ := by {intro h, injection h }
 
--- @[simp]
--- theorem mod_add (a b m : ℤ) : ((a % m) + (b % m)) % m = (a + b) % m :=
--- begin
---   rw int.mod_add_mod,
---   rw int.mod_mod_add,
--- end
-
 @[simp]
 theorem add_mul_mod (a b m : ℕ) : (a + m * b) % m = a % m := by simp
 
@@ -546,8 +539,6 @@ begin
       exact multiset.countp_eq_zero_of_false_of_mem this,
   },
   right,
-  -- use s, use t,
-  -- split,
   rw multiset.countp_split g.V.val (λ x, s = x ∨ t = x),
   simp,
   have : ∀ v ∈ g.V, ¬ (s = v ∨ t = v) → g.degree v % 2 = 0,
